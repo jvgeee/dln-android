@@ -2,5 +2,6 @@ package com.deeplinknow
 
 data class DLNConfig(
     val apiKey: String,
-    val apiBaseUrl: String = "https://deeplinknow.com/api/v1"
+    val apiBaseUrl: String = "https://deeplinknow.com/api/v1",
+    val enableLogs: Boolean = false
 ) 

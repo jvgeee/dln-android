@@ -10,16 +10,32 @@ class DeepLinkNow private constructor(
     private val config: DLNConfig,
     private val context: Context
 ) {
+    private fun log(message: String, vararg args: Any?) {
+        if (config.enableLogs) {
+            println("[DeepLinkNow] $message ${args.joinToString()}")
+        }
+    }
+
     companion object {
         private var instance: DeepLinkNow? = null
 
         @JvmStatic
-        fun initialize(context: Context, apiKey: String) {
+        @JvmOverloads
+        fun initialize(
+            context: Context, 
+            apiKey: String,
+            config: Map<String, Any> = emptyMap()
+        ) {
             if (instance == null) {
+                val enableLogs = config["enableLogs"] as? Boolean ?: false
                 instance = DeepLinkNow(
-                    config = DLNConfig(apiKey),
+                    config = DLNConfig(
+                        apiKey = apiKey,
+                        enableLogs = enableLogs
+                    ),
                     context = context.applicationContext
                 )
+                instance?.log("Initialized with config:", "apiKey" to apiKey, "config" to config)
             }
         }
 
@@ -29,10 +45,24 @@ class DeepLinkNow private constructor(
         }
     }
 
+    fun checkClipboard(): String? {
+        log("Checking clipboard")
+        return try {
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val content = clipboard.primaryClip?.getItemAt(0)?.text?.toString()
+            log("Clipboard content:", content ?: "null")
+            content
+        } catch (e: Exception) {
+            log("Failed to check clipboard:", e)
+            null
+        }
+    }
+
     suspend fun checkDeferredDeepLink(
         callback: (Uri?, DLNAttribution?) -> Unit
     ) = withContext(Dispatchers.IO) {
         try {
+            log("Checking deferred deep link")
             val fingerprint = DLNDeviceFingerprint.generate(context)
             val response = makeApiRequest(
                 endpoint = "deferred_deeplink",
@@ -42,6 +72,7 @@ class DeepLinkNow private constructor(
                 )
             )
             
+            log("Deferred deep link response:", response)
             withContext(Dispatchers.Main) {
                 callback(
                     response.deepLink?.let { Uri.parse(it) },
@@ -49,15 +80,11 @@ class DeepLinkNow private constructor(
                 )
             }
         } catch (e: Exception) {
+            log("Failed to check deferred deep link:", e)
             withContext(Dispatchers.Main) {
                 callback(null, null)
             }
         }
-    }
-
-    fun checkClipboard(): String? {
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        return clipboard.primaryClip?.getItemAt(0)?.text?.toString()
     }
 
     fun createDeepLink(
